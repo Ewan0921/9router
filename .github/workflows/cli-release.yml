@@ -1,0 +1,52 @@
+name: Build and Release CLI Package
+
+on:
+  push:
+    tags:
+      - "cli-v*"
+  workflow_dispatch:
+
+jobs:
+  pack-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install app dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install CLI dependencies
+        run: npm install --no-audit --no-fund
+        working-directory: cli
+
+      - name: Pack CLI
+        run: npm run cli:pack
+
+      - name: Resolve package version
+        id: pkg
+        run: |
+          VERSION=$(node -p "require('./cli/package.json').version")
+          TARBALL="9router-${VERSION}.tgz"
+          if [ ! -f "$TARBALL" ]; then
+            echo "Missing tarball: $TARBALL"
+            ls -la *.tgz || true
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('cli-v{0}', steps.pkg.outputs.version) }}
+          name: CLI ${{ steps.pkg.outputs.version }}
+          files: ${{ steps.pkg.outputs.tarball }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
