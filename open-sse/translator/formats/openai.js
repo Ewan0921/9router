@@ -4,6 +4,35 @@ import { ROLE, OPENAI_BLOCK, CLAUDE_BLOCK, VALID_OPENAI_CONTENT_TYPES, VALID_OPE
 // Re-export valid-type lists (moved to schema/blocks.js) to keep existing importers working.
 export { VALID_OPENAI_CONTENT_TYPES, VALID_OPENAI_MESSAGE_TYPES };
 
+// Chat Completions `image_url.detail` enum. Cursor and other clients may send
+// extra keys (e.g. `dimensions`) that strict OpenAI-compatible gateways reject.
+const OPENAI_IMAGE_DETAIL = new Set(["auto", "low", "high"]);
+
+function sanitizeImageUrl(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== "object" || Array.isArray(imageUrl)) return imageUrl;
+  const out = {};
+  if (typeof imageUrl.url === "string") out.url = imageUrl.url;
+  if (OPENAI_IMAGE_DETAIL.has(imageUrl.detail)) out.detail = imageUrl.detail;
+  return out;
+}
+
+// Request-message tool_calls are `{id,type,function}` (or custom). `index` is a
+// streaming-delta field that Cursor/SDKs echo into history; strict upstreams 400.
+function sanitizeToolCall(tc) {
+  if (!tc || typeof tc !== "object") return tc;
+  const out = {};
+  if (tc.id != null) out.id = tc.id;
+  if (tc.type) out.type = tc.type;
+  if (tc.function && typeof tc.function === "object") {
+    const fn = {};
+    if (tc.function.name != null) fn.name = tc.function.name;
+    if (tc.function.arguments != null) fn.arguments = tc.function.arguments;
+    out.function = fn;
+  }
+  if (tc.custom && typeof tc.custom === "object") out.custom = tc.custom;
+  return out;
+}
+
 // Filter messages to OpenAI standard format
 // Remove: thinking, redacted_thinking, signature, and other non-OpenAI blocks
 // opts.preserveCacheControl: keep cache_control on content blocks (e.g. for DashScope/alicode)
@@ -16,15 +45,34 @@ export function filterToOpenAIFormat(body, opts = {}) {
     return keepCache && cache_control ? { ...rest, cache_control } : rest;
   }
 
+  function sanitizeContentBlock(block) {
+    const next = stripBlock(block);
+    if (next.type === OPENAI_BLOCK.IMAGE_URL && next.image_url != null) {
+      next.image_url = sanitizeImageUrl(next.image_url);
+    }
+    return next;
+  }
+
   body.messages = body.messages.map(msg => {
     // Normalize developer role to system (many providers don't support developer)
     if (msg.role === ROLE.DEVELOPER) msg = { ...msg, role: ROLE.SYSTEM };
 
-    // Keep tool messages as-is (OpenAI format)
-    if (msg.role === ROLE.TOOL) return msg;
+    if (Array.isArray(msg.tool_calls)) {
+      msg = { ...msg, tool_calls: msg.tool_calls.map(sanitizeToolCall) };
+    }
 
-    // Keep assistant messages with tool_calls as-is
-    if (msg.role === ROLE.ASSISTANT && msg.tool_calls) return msg;
+    // Keep tool messages as-is (OpenAI format), but still strip image_url extras
+    if (msg.role === ROLE.TOOL) {
+      if (Array.isArray(msg.content)) {
+        return {
+          ...msg,
+          content: msg.content.map(b =>
+            b?.type === OPENAI_BLOCK.IMAGE_URL ? sanitizeContentBlock(b) : b
+          ),
+        };
+      }
+      return msg;
+    }
 
     // Handle string content
     if (typeof msg.content === "string") return msg;
@@ -39,7 +87,7 @@ export function filterToOpenAIFormat(body, opts = {}) {
 
         // Only keep valid OpenAI content types
         if (VALID_OPENAI_CONTENT_TYPES.includes(block.type)) {
-          filteredContent.push(stripBlock(block));
+          filteredContent.push(sanitizeContentBlock(block));
         } else if (block.type === CLAUDE_BLOCK.TOOL_USE) {
           // Convert tool_use to tool_calls format (handled separately)
           continue;
@@ -49,8 +97,10 @@ export function filterToOpenAIFormat(body, opts = {}) {
         }
       }
       
-      // If all content was filtered, add empty text
+      // If all content was filtered, add empty text — unless this is a tool-call
+      // assistant turn, where OpenAI expects content: null rather than "".
       if (filteredContent.length === 0) {
+        if (msg.tool_calls) return { ...msg, content: null };
         filteredContent.push({ type: OPENAI_BLOCK.TEXT, text: "" });
       }
       
