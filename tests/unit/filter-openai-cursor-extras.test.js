@@ -93,13 +93,14 @@ describe("filterToOpenAIFormat Cursor extras", () => {
     expect(result.messages[0].content[0].image_url).toEqual({ url: PNG });
   });
 
-  it("strips image_url extras on tool-result image parts", () => {
+  it("moves image parts from tool results to a following user message", () => {
     const body = {
       messages: [
         {
           role: "tool",
           tool_call_id: "call_1",
           content: [
+            { type: "text", text: "Read image file: page_01.png" },
             {
               type: "image_url",
               image_url: { url: PNG, dimensions: { width: 10, height: 10 } },
@@ -110,8 +111,47 @@ describe("filterToOpenAIFormat Cursor extras", () => {
     };
 
     const result = filterToOpenAIFormat(JSON.parse(JSON.stringify(body)));
-    expect(result.messages[0].content[0].image_url).toEqual({ url: PNG });
-    expect(result.messages[0].tool_call_id).toBe("call_1");
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages[0]).toEqual({
+      role: "tool",
+      tool_call_id: "call_1",
+      content: [{ type: "text", text: "Read image file: page_01.png" }],
+    });
+    expect(result.messages[1]).toEqual({
+      role: "user",
+      content: [{ type: "image_url", image_url: { url: PNG } }],
+    });
+  });
+
+  it("emits relocated images only after the whole parallel tool-result run", () => {
+    const body = {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            { id: "call_1", type: "function", function: { name: "ReadFile", arguments: "{}" } },
+            { id: "call_2", type: "function", function: { name: "Read", arguments: "{}" } },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: [
+            { type: "text", text: "Read image file: page_01.png" },
+            { type: "image_url", image_url: { url: PNG } },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_2", content: "file body" },
+      ],
+    };
+
+    const result = filterToOpenAIFormat(JSON.parse(JSON.stringify(body)));
+    expect(result.messages.map((m) => m.role)).toEqual(["assistant", "tool", "tool", "user"]);
+    expect(result.messages[2].content).toBe("file body");
+    expect(result.messages[3].content).toEqual([
+      { type: "image_url", image_url: { url: PNG } },
+    ]);
   });
 
   it("keeps reasoning_content on assistant tool-call turns", () => {
@@ -177,5 +217,50 @@ describe("filterToOpenAIFormat Cursor extras", () => {
       type: "function",
       function: { name: "Read", arguments: "{}" },
     });
+  });
+
+  it("translateRequest openai→openai relocates tool-result images before upstream", () => {
+    const body = {
+      model: "gpt-5.6-luna",
+      messages: [
+        { role: "user", content: "read that page" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            { id: "call_img", type: "function", function: { name: "ReadFile", arguments: "{}" } },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_img",
+          content: [
+            { type: "text", text: "Read image file: page_01.png" },
+            {
+              type: "image_url",
+              image_url: { url: PNG, dimensions: { width: 8, height: 8 } },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = translateRequest(
+      FORMATS.OPENAI,
+      FORMATS.OPENAI,
+      "gpt-5.6-luna",
+      JSON.parse(JSON.stringify(body)),
+      true,
+      null,
+      "openai-compatible-chat-test",
+    );
+
+    expect(result.messages.map((m) => m.role)).toEqual(["user", "assistant", "tool", "user"]);
+    expect(result.messages[2].content).toEqual([
+      { type: "text", text: "Read image file: page_01.png" },
+    ]);
+    expect(result.messages[3].content).toEqual([
+      { type: "image_url", image_url: { url: PNG } },
+    ]);
   });
 });

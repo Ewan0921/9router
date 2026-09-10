@@ -53,7 +53,20 @@ export function filterToOpenAIFormat(body, opts = {}) {
     return next;
   }
 
-  body.messages = body.messages.map(msg => {
+  const normalized = [];
+  const pendingImages = [];
+
+  // Chat Completions allows image parts on user messages only, but Cursor returns
+  // them inside `role: "tool"` results (ReadFile). Strict gateways 400 with
+  // "image ... parts are valid only for user messages". Stash those parts and
+  // re-emit them as a user turn once the tool-result run is over, so the model
+  // still receives the images.
+  function flushPendingImages() {
+    if (pendingImages.length === 0) return;
+    normalized.push({ role: ROLE.USER, content: pendingImages.splice(0) });
+  }
+
+  for (let msg of body.messages) {
     // Normalize developer role to system (many providers don't support developer)
     if (msg.role === ROLE.DEVELOPER) msg = { ...msg, role: ROLE.SYSTEM };
 
@@ -61,21 +74,33 @@ export function filterToOpenAIFormat(body, opts = {}) {
       msg = { ...msg, tool_calls: msg.tool_calls.map(sanitizeToolCall) };
     }
 
-    // Keep tool messages as-is (OpenAI format), but still strip image_url extras
+    // Move image parts out of tool messages; keep the remaining blocks in place.
     if (msg.role === ROLE.TOOL) {
       if (Array.isArray(msg.content)) {
-        return {
+        const textParts = [];
+        for (const block of msg.content) {
+          if (block?.type === OPENAI_BLOCK.IMAGE_URL) {
+            pendingImages.push(sanitizeContentBlock(block));
+          } else {
+            textParts.push(block);
+          }
+        }
+        msg = {
           ...msg,
-          content: msg.content.map(b =>
-            b?.type === OPENAI_BLOCK.IMAGE_URL ? sanitizeContentBlock(b) : b
-          ),
+          content: textParts.length > 0 ? textParts : [{ type: OPENAI_BLOCK.TEXT, text: "" }],
         };
       }
-      return msg;
+      normalized.push(msg);
+      continue;
     }
 
+    flushPendingImages();
+
     // Handle string content
-    if (typeof msg.content === "string") return msg;
+    if (typeof msg.content === "string") {
+      normalized.push(msg);
+      continue;
+    }
 
     // Handle array content
     if (Array.isArray(msg.content)) {
@@ -100,15 +125,22 @@ export function filterToOpenAIFormat(body, opts = {}) {
       // If all content was filtered, add empty text — unless this is a tool-call
       // assistant turn, where OpenAI expects content: null rather than "".
       if (filteredContent.length === 0) {
-        if (msg.tool_calls) return { ...msg, content: null };
+        if (msg.tool_calls) {
+          normalized.push({ ...msg, content: null });
+          continue;
+        }
         filteredContent.push({ type: OPENAI_BLOCK.TEXT, text: "" });
       }
       
-      return { ...msg, content: filteredContent };
+      normalized.push({ ...msg, content: filteredContent });
+      continue;
     }
     
-    return msg;
-  });
+    normalized.push(msg);
+  }
+
+  flushPendingImages();
+  body.messages = normalized;
   
   // Filter out messages with only empty text (but NEVER filter tool messages)
   body.messages = body.messages.filter(msg => {
