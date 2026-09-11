@@ -22,7 +22,7 @@ beforeAll(async () => {
   vi.resetModules();
   db = await import("@/lib/db/index.js");
   await db.initDb();
-  await db.updateSettings({ enableObservability2: true, observabilityBatchSize: 1 });
+  await db.updateSettings({ enableObservability: true, observabilityBatchSize: 1 });
 
   const { getAdapter } = await import("@/lib/db/driver.js");
   adapter = await getAdapter();
@@ -248,5 +248,29 @@ describe("API route contract — validation boundary", () => {
     const body = await res.json();
     expect(Array.isArray(body.details)).toBe(true);
     expect(body.pagination).toMatchObject({ page: 1, pageSize: 20 });
+  });
+
+  it("returns stored request/response payloads unredacted", async () => {
+    await saveDetail({
+      id: "payload-1",
+      provider: "openai",
+      model: "gpt-4",
+      status: "success",
+      tokens: { prompt_tokens: 10, completion_tokens: 5 },
+      request: { messages: [{ role: "user", content: "inspect me" }] },
+      providerRequest: { messages: [{ role: "user", content: "inspect me" }] },
+      providerResponse: { choices: [{ message: { content: "full answer" } }] },
+      response: { content: "full answer" },
+    });
+
+    const res = await GET(makeReq("page=1&pageSize=20"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const row = body.details.find((d) => d.id === "payload-1");
+    expect(row).toBeDefined();
+    expect(row.request).toEqual({ messages: [{ role: "user", content: "inspect me" }] });
+    expect(row.providerRequest).toEqual({ messages: [{ role: "user", content: "inspect me" }] });
+    expect(row.providerResponse).toEqual({ choices: [{ message: { content: "full answer" } }] });
+    expect(row.response).toEqual({ content: "full answer" });
   });
 });

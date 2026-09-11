@@ -10,6 +10,7 @@
 - **Gemini**: persist and replay `thoughtSignature` scoped by session namespace
 
 ## Fixes
+- **Usage**: show full input/output and raw request/response on `/dashboard/usage?tab=details` instead of `{ "redacted": true }` stubs
 - **Claude**: normalize adaptive auto effort (`output_config.effort`) (#3792)
 - **Antigravity**: prevent Google anti-abuse rate limits during multi-account refresh (#3813)
 - **Anthropic-compatible**: forward Claude beta flags to nodes fronting Anthropic (#3797)
