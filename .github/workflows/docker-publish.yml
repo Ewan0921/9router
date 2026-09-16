@@ -30,10 +30,16 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
+        id: dockerhub_login
+        continue-on-error: true
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Report Docker Hub skip
+        if: steps.dockerhub_login.outcome != 'success'
+        run: echo "::warning::Docker Hub login failed; publishing to GHCR only (${GHCR_IMAGE}). Fork cannot push ${DOCKERHUB_IMAGE}."
 
       - name: Extract metadata
         id: meta
@@ -41,7 +47,7 @@ jobs:
         with:
           images: |
             ${{ env.GHCR_IMAGE }}
-            ${{ env.DOCKERHUB_IMAGE }}
+            ${{ steps.dockerhub_login.outcome == 'success' && env.DOCKERHUB_IMAGE || '' }}
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}

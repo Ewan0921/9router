@@ -1,6 +1,7 @@
 # v0.5.75 (2026-09-10)
 
 ## Features
+- **Fork**: ship CLI `0.5.75-ewan.1` on top of upstream v0.5.75, keeping unredacted usage details and OpenAI translator sanitizers for strict gateways
 - **Video**: add OpenRouter and Vertex AI (Veo) video generation on `/v1/videos/*` via a provider adapter layer; poll requests resolve their provider from `x-connection-id` or `?provider=`
 - **Antigravity**: add weekly quota tracking (Gemini weekly / Claude & GPT weekly) and free-tier handling from `retrieveUserQuotaSummary` (#3892)
 - **Codex**: add GPT Image 2.5, Flare and Sunburst image models with multi-image support; add the same ids to the OpenAI catalog
