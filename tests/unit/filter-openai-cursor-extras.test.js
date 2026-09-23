@@ -74,6 +74,39 @@ describe("filterToOpenAIFormat Cursor extras", () => {
     expect(img.image_url).not.toHaveProperty("dimensions");
   });
 
+  it("strips nested image_url.providerOptions and sibling content-part providerOptions", () => {
+    const body = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              providerOptions: { openai: { imageDetail: "high" } },
+              provider_options: { openai: { imageDetail: "low" } },
+              image_url: {
+                url: PNG,
+                detail: "high",
+                dimensions: { width: 1920, height: 1080 },
+                providerOptions: { openai: { imageDetail: "auto" } },
+                provider_options: { foo: 1 },
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = filterToOpenAIFormat(JSON.parse(JSON.stringify(body)));
+    const img = result.messages[0].content[0];
+    expect(img).toEqual({ type: "image_url", image_url: { url: PNG, detail: "high" } });
+    expect(img).not.toHaveProperty("providerOptions");
+    expect(img).not.toHaveProperty("provider_options");
+    expect(img.image_url).not.toHaveProperty("providerOptions");
+    expect(img.image_url).not.toHaveProperty("provider_options");
+    expect(img.image_url).not.toHaveProperty("dimensions");
+  });
+
   it("drops invalid image_url.detail and string/object dimensions", () => {
     const body = {
       messages: [
@@ -100,10 +133,20 @@ describe("filterToOpenAIFormat Cursor extras", () => {
           role: "tool",
           tool_call_id: "call_1",
           content: [
-            { type: "text", text: "Read image file: page_01.png" },
+            {
+              type: "text",
+              text: "Read image file: page_01.png",
+              providerOptions: { cursor: { tool: "ReadFile" } },
+            },
             {
               type: "image_url",
-              image_url: { url: PNG, dimensions: { width: 10, height: 10 } },
+              providerOptions: { openai: { imageDetail: "high" } },
+              image_url: {
+                url: PNG,
+                detail: "low",
+                dimensions: { width: 10, height: 10 },
+                providerOptions: { openai: { imageDetail: "auto" } },
+              },
             },
           ],
         },
@@ -119,8 +162,11 @@ describe("filterToOpenAIFormat Cursor extras", () => {
     });
     expect(result.messages[1]).toEqual({
       role: "user",
-      content: [{ type: "image_url", image_url: { url: PNG } }],
+      content: [{ type: "image_url", image_url: { url: PNG, detail: "low" } }],
     });
+    expect(result.messages[1].content[0]).not.toHaveProperty("providerOptions");
+    expect(result.messages[1].content[0].image_url).not.toHaveProperty("providerOptions");
+    expect(result.messages[1].content[0].image_url).not.toHaveProperty("dimensions");
   });
 
   it("emits relocated images only after the whole parallel tool-result run", () => {
@@ -184,7 +230,13 @@ describe("filterToOpenAIFormat Cursor extras", () => {
           content: [
             {
               type: "image_url",
-              image_url: { url: PNG, detail: "auto", dimensions: { width: 8, height: 8 } },
+              providerOptions: { cursor: true },
+              image_url: {
+                url: PNG,
+                detail: "auto",
+                dimensions: { width: 8, height: 8 },
+                providerOptions: { openai: { imageDetail: "high" } },
+              },
             },
           ],
         },
@@ -210,8 +262,11 @@ describe("filterToOpenAIFormat Cursor extras", () => {
       "openai-compatible-chat-test",
     );
 
-    const img = result.messages[1].content[0].image_url;
+    const part = result.messages[1].content[0];
+    expect(part).not.toHaveProperty("providerOptions");
+    const img = part.image_url;
     expect(img).toEqual({ url: PNG, detail: "auto" });
+    expect(img).not.toHaveProperty("providerOptions");
     expect(result.messages[3].tool_calls[0]).toEqual({
       id: "call_a",
       type: "function",
@@ -238,7 +293,13 @@ describe("filterToOpenAIFormat Cursor extras", () => {
             { type: "text", text: "Read image file: page_01.png" },
             {
               type: "image_url",
-              image_url: { url: PNG, dimensions: { width: 8, height: 8 } },
+              provider_options: { cursor: true },
+              image_url: {
+                url: PNG,
+                detail: "high",
+                dimensions: { width: 8, height: 8 },
+                providerOptions: { openai: { imageDetail: "low" } },
+              },
             },
           ],
         },
@@ -260,7 +321,10 @@ describe("filterToOpenAIFormat Cursor extras", () => {
       { type: "text", text: "Read image file: page_01.png" },
     ]);
     expect(result.messages[3].content).toEqual([
-      { type: "image_url", image_url: { url: PNG } },
+      { type: "image_url", image_url: { url: PNG, detail: "high" } },
     ]);
+    expect(result.messages[3].content[0]).not.toHaveProperty("provider_options");
+    expect(result.messages[3].content[0].image_url).not.toHaveProperty("providerOptions");
+    expect(result.messages[3].content[0].image_url).not.toHaveProperty("dimensions");
   });
 });

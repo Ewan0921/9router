@@ -2,10 +2,10 @@
 
 本文说明如何基于本仓库发布定制版 `9router` 安装包，以及如何在 VPS 上安装、运行和回滚。VPS **只安装产物、不在本机构建**。
 
-当前定制版本号：`0.5.85-ewan.1`  
-发布 tag 前缀：`cli-v*`（例如 `cli-v0.5.85-ewan.1`）  
+当前定制版本号：`0.5.85-ewan.2`  
+发布 tag 前缀：`cli-v*`（例如 `cli-v0.5.85-ewan.2`）  
 工作流：[.github/workflows/cli-release.yml](.github/workflows/cli-release.yml)  
-当前产物：[CLI 0.5.85-ewan.1 Release](https://github.com/Ewan0921/9router/releases/tag/cli-v0.5.85-ewan.1)
+当前产物：[CLI 0.5.85-ewan.2 Release](https://github.com/Ewan0921/9router/releases/tag/cli-v0.5.85-ewan.2)
 
 ## 原则
 
@@ -55,7 +55,7 @@ tar -czf /root/9router-backup-$(date +%Y%m%d-%H%M%S).tar.gz -C /root .9router
 安装或升级到指定 Release（把版本号换成实际值）：
 
 ```bash
-npm i -g https://github.com/Ewan0921/9router/releases/download/cli-v0.5.85-ewan.1/9router-0.5.85-ewan.1.tgz
+npm i -g https://github.com/Ewan0921/9router/releases/download/cli-v0.5.85-ewan.2/9router-0.5.85-ewan.2.tgz
 ```
 
 `postinstall` 会把 `sql.js` / `better-sqlite3` / `systray2` 预热到 `~/.9router/runtime`。`/usr/bin/9router` 会指向新包。
@@ -93,7 +93,7 @@ npm i -g 9router@0.5.85
 或回到上一个自建 Release：
 
 ```bash
-npm i -g https://github.com/Ewan0921/9router/releases/download/cli-v0.5.81-ewan.1/9router-0.5.81-ewan.1.tgz
+npm i -g https://github.com/Ewan0921/9router/releases/download/cli-v0.5.85-ewan.1/9router-0.5.85-ewan.1.tgz
 ```
 
 只有数据损坏时才需要从备份恢复：
