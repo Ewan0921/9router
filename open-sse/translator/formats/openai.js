@@ -4,8 +4,10 @@ import { ROLE, OPENAI_BLOCK, CLAUDE_BLOCK, VALID_OPENAI_CONTENT_TYPES, VALID_OPE
 // Re-export valid-type lists (moved to schema/blocks.js) to keep existing importers working.
 export { VALID_OPENAI_CONTENT_TYPES, VALID_OPENAI_MESSAGE_TYPES };
 
-// Chat Completions `image_url.detail` enum. Cursor and other clients may send
-// extra keys (e.g. `dimensions`) that strict OpenAI-compatible gateways reject.
+// Chat Completions `image_url` whitelist: `url` plus optional `detail`
+// (`auto` | `low` | `high`). Cursor / AI SDK also send `dimensions` and
+// `providerOptions` under `image_url`; experientiallabs and other strict
+// openai-compatible gateways 400 on those keys.
 const OPENAI_IMAGE_DETAIL = new Set(["auto", "low", "high"]);
 
 function sanitizeImageUrl(imageUrl) {
@@ -45,12 +47,17 @@ export function filterToOpenAIFormat(body, opts = {}) {
     return keepCache && cache_control ? { ...rest, cache_control } : rest;
   }
 
+  // Cursor / AI SDK `providerOptions` (and `provider_options`) is not a Chat
+  // Completions field. experientiallabs 400s on `image_url.providerOptions`.
+  function stripProviderOptionFields(block) {
+    delete block.providerOptions;
+    delete block.provider_options;
+    if (block.image_url != null) block.image_url = sanitizeImageUrl(block.image_url);
+    return block;
+  }
+
   function sanitizeContentBlock(block) {
-    const next = stripBlock(block);
-    if (next.type === OPENAI_BLOCK.IMAGE_URL && next.image_url != null) {
-      next.image_url = sanitizeImageUrl(next.image_url);
-    }
-    return next;
+    return stripProviderOptionFields(stripBlock(block));
   }
 
   const normalized = [];
@@ -81,6 +88,15 @@ export function filterToOpenAIFormat(body, opts = {}) {
         for (const block of msg.content) {
           if (block?.type === OPENAI_BLOCK.IMAGE_URL) {
             pendingImages.push(sanitizeContentBlock(block));
+          } else if (
+            block && typeof block === "object" &&
+            (Object.prototype.hasOwnProperty.call(block, "providerOptions") ||
+              Object.prototype.hasOwnProperty.call(block, "provider_options") ||
+              block.image_url != null)
+          ) {
+            // Keep signature / cache_control on tool text; still drop Cursor
+            // providerOptions and whitelist any nested image_url.
+            textParts.push(stripProviderOptionFields({ ...block }));
           } else {
             textParts.push(block);
           }
@@ -117,8 +133,8 @@ export function filterToOpenAIFormat(body, opts = {}) {
           // Convert tool_use to tool_calls format (handled separately)
           continue;
         } else if (block.type === CLAUDE_BLOCK.TOOL_RESULT) {
-          // Keep tool_result but clean it
-          filteredContent.push(stripBlock(block));
+          // Keep tool_result but clean it (including any nested image_url)
+          filteredContent.push(sanitizeContentBlock(block));
         }
       }
       

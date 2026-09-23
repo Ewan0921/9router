@@ -1,3 +1,8 @@
+# v0.5.85-ewan.2 (2026-09-23)
+
+## Fixes
+- **OpenAI translator**: strip Cursor / AI SDK `providerOptions` and `provider_options` from content parts, and keep `image_url` on a `url` + `detail` whitelist, so strict openai-compatible gateways (experientiallabs) do not 400 on `image_url.providerOptions`
+
 # v0.5.85 (2026-09-22)
 
 ## Features
