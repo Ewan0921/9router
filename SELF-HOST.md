@@ -2,10 +2,10 @@
 
 本文说明如何基于本仓库发布定制版 `9router` 安装包，以及如何在 VPS 上安装、运行和回滚。VPS **只安装产物、不在本机构建**。
 
-当前定制版本号：`0.5.91-ewan.1`  
-发布 tag 前缀：`cli-v*`（例如 `cli-v0.5.91-ewan.1`）  
+当前定制版本号：`0.5.95-ewan.1`  
+发布 tag 前缀：`cli-v*`（例如 `cli-v0.5.95-ewan.1`）  
 工作流：[.github/workflows/cli-release.yml](.github/workflows/cli-release.yml)  
-当前产物：[CLI 0.5.91-ewan.1 Release](https://github.com/Ewan0921/9router/releases/tag/cli-v0.5.91-ewan.1)
+当前产物：[CLI 0.5.95-ewan.1 Release](https://github.com/Ewan0921/9router/releases/tag/cli-v0.5.95-ewan.1)
 
 ## 原则
 
@@ -18,20 +18,20 @@
 ## 日常发布（本机改代码 → GitHub Actions 出包）
 
 1. 在本机改定制功能，提交到 `master`（或你的工作分支并合并进 `master`）。
-2. 根目录 [`package.json`](package.json) 和 [`cli/package.json`](cli/package.json) 的 `version` 保持一致。例如 `0.5.85-ewan.2` → `0.5.91-ewan.1`。`cli/scripts/build-cli.js` 打包时也会把 CLI 版本同步到根 `package.json`。
+2. 根目录 [`package.json`](package.json) 和 [`cli/package.json`](cli/package.json) 的 `version` 保持一致。例如 `0.5.91-ewan.1` → `0.5.95-ewan.1`。`cli/scripts/build-cli.js` 打包时也会把 CLI 版本同步到根 `package.json`。
 3. 提交版本号变更并推送：
 
 ```bash
 git add package.json cli/package.json
-git commit -m "Release CLI 0.5.91-ewan.1"
+git commit -m "Release CLI 0.5.95-ewan.1"
 git push origin master
 ```
 
 4. 打 **annotated** tag 并推送。tag 必须是 `cli-v` + 版本号，才能触发 CLI 工作流，且不会误触发 Docker 工作流的 `v*`：
 
 ```bash
-git tag -a cli-v0.5.91-ewan.1 -m "CLI 0.5.91-ewan.1"
-git push origin cli-v0.5.91-ewan.1
+git tag -a cli-v0.5.95-ewan.1 -m "CLI 0.5.95-ewan.1"
+git push origin cli-v0.5.95-ewan.1
 ```
 
 5. 在 GitHub Actions 中等待 **Build and Release CLI Package**。成功后 Release 页面会出现 `9router-<版本>.tgz`。
@@ -55,7 +55,7 @@ tar -czf /root/9router-backup-$(date +%Y%m%d-%H%M%S).tar.gz -C /root .9router
 安装或升级到指定 Release（把版本号换成实际值）：
 
 ```bash
-npm i -g https://github.com/Ewan0921/9router/releases/download/cli-v0.5.91-ewan.1/9router-0.5.91-ewan.1.tgz
+npm i -g https://github.com/Ewan0921/9router/releases/download/cli-v0.5.95-ewan.1/9router-0.5.95-ewan.1.tgz
 ```
 
 `postinstall` 会把 `sql.js` / `better-sqlite3` / `systray2` 预热到 `~/.9router/runtime`。`/usr/bin/9router` 会指向新包。
@@ -66,7 +66,7 @@ npm i -g https://github.com/Ewan0921/9router/releases/download/cli-v0.5.91-ewan.
 9router --version
 ```
 
-应显示定制版本号，而不是官方的 `0.5.91`。
+应显示定制版本号，而不是官方的 `0.5.95`。
 
 ## 运行
 
@@ -85,15 +85,15 @@ npm i -g https://github.com/Ewan0921/9router/releases/download/cli-v0.5.91-ewan.
 安装包和数据目录是分开的。回滚全局包不会动用户数据：
 
 ```bash
-# 回到 npm 官方 0.5.91
-npm i -g 9router@0.5.91
+# 回到 npm 官方 0.5.95
+npm i -g 9router@0.5.95
 9router --tray --skip-update -p 20128
 ```
 
 或回到上一个自建 Release：
 
 ```bash
-npm i -g https://github.com/Ewan0921/9router/releases/download/cli-v0.5.85-ewan.2/9router-0.5.85-ewan.2.tgz
+npm i -g https://github.com/Ewan0921/9router/releases/download/cli-v0.5.91-ewan.1/9router-0.5.91-ewan.1.tgz
 ```
 
 只有数据损坏时才需要从备份恢复：
