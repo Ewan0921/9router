@@ -13,6 +13,8 @@ import {
   coerceResponsesOutput,
 } from "../formats/responsesApi.js";
 import { ROLE, OPENAI_BLOCK, RESPONSES_ITEM } from "../schema/index.js";
+import { nestResponsesReasoning } from "../concerns/responsesReasoning.js";
+import { ensurePromptCacheKey } from "../concerns/promptCacheKey.js";
 
 const MAX_TOOL_NAME_LEN = 128;
 
@@ -241,7 +243,6 @@ export function openaiResponsesToOpenAIRequest(model, body, stream, credentials)
   delete result.input;
   delete result.instructions;
   delete result.include;
-  delete result.prompt_cache_key;
   delete result.store;
   if (typeof result.reasoning?.effort === "string") {
     result.reasoning_effort = result.reasoning.effort;
@@ -328,6 +329,8 @@ export function openaiToOpenAIResponsesRequest(model, body, stream, credentials)
     }
     delete out.max_tokens;
     delete out.max_completion_tokens;
+    nestResponsesReasoning(out);
+    ensurePromptCacheKey(out);
     return out;
   }
 
@@ -455,9 +458,11 @@ export function openaiToOpenAIResponsesRequest(model, body, stream, credentials)
   }
   if (body.top_p !== undefined) result.top_p = body.top_p;
   if (body.reasoning !== undefined) result.reasoning = body.reasoning;
-  if (body.reasoning_effort !== undefined) result.reasoning = { effort: body.reasoning_effort, summary: "auto" };
+  if (body.reasoning_effort !== undefined) result.reasoning_effort = body.reasoning_effort;
+  nestResponsesReasoning(result);
   if (body.service_tier !== undefined) result.service_tier = body.service_tier;
   if (body.prompt_cache_key !== undefined) result.prompt_cache_key = body.prompt_cache_key;
+  ensurePromptCacheKey(result);
 
   return result;
 }

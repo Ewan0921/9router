@@ -6,6 +6,7 @@ import { restoreToolNames } from "../utils/opencodeFingerprint.js";
 import { filterToOpenAIFormat } from "./formats/openai.js";
 import { normalizeThinkingConfig } from "../services/provider.js";
 import { applyThinking, captureThinking } from "./concerns/thinkingUnified.js";
+import { ensurePromptCacheKey, shouldAttachStablePromptCacheKey, stripGeneratedPromptCacheKey } from "./concerns/promptCacheKey.js";
 import { captureSessionId } from "../utils/sessionManager.js";
 import { AntigravityExecutor } from "../executors/antigravity.js";
 import { PROVIDERS } from "../providers/index.js";
@@ -173,6 +174,14 @@ export function translateRequest(sourceFormat, targetFormat, model, body, stream
   //     result._toolNameMap = toolNameMap;
   //   }
   // }
+
+  // Stable prompt-cache key for Responses bodies. Session-owned providers
+  // (Codex, Grok CLI, OpenCode) keep their own key; drop only an auto key.
+  if (shouldAttachStablePromptCacheKey(provider, targetFormat)) {
+    ensurePromptCacheKey(result);
+  } else if (targetFormat === FORMATS.OPENAI_RESPONSES || targetFormat === FORMATS.OPENAI_RESPONSE) {
+    stripGeneratedPromptCacheKey(result);
+  }
 
   return result;
 }

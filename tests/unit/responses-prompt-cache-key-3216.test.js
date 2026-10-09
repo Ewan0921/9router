@@ -21,13 +21,13 @@ describe("#3216 prompt_cache_key across the chat/responses translation", () => {
     expect(out.prompt_cache_key).toBe("stable-cache-key");
   });
 
-  it("does not invent a key when the client sent none", () => {
+  it("mints a stable key when the client sent none", () => {
     const out = openaiToOpenAIResponsesRequest("example-model", CHAT_BODY(), true, {});
 
-    expect(out.prompt_cache_key).toBeUndefined();
+    expect(out.prompt_cache_key).toMatch(/^9r-[a-f0-9]{32}$/);
   });
 
-  it("still drops the key on the responses → chat direction", () => {
+  it("keeps the key on the responses → chat direction", () => {
     const out = openaiResponsesToOpenAIRequest(
       "example-model",
       {
@@ -39,6 +39,6 @@ describe("#3216 prompt_cache_key across the chat/responses translation", () => {
       {},
     );
 
-    expect(out.prompt_cache_key).toBeUndefined();
+    expect(out.prompt_cache_key).toBe("stable-cache-key");
   });
 });

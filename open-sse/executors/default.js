@@ -8,6 +8,8 @@ import { buildClineHeaders } from "../shared/clineAuth.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { stripUnsupportedParams } from "../translator/concerns/paramSupport.js";
+import { nestResponsesReasoning } from "../translator/concerns/responsesReasoning.js";
+import { ensurePromptCacheKey } from "../translator/concerns/promptCacheKey.js";
 import { extractClaudeSessionIdFromUserId } from "../utils/claudeCloaking.js";
 
 // Auth header descriptors — derived from registry transport.auth, fallback to hardcoded defaults.
@@ -75,6 +77,12 @@ const REFRESH_GRANTS = Object.fromEntries(
     })
 );
 
+function isResponsesShaped(body) {
+  if (!body || typeof body !== "object") return false;
+  const hasInput = Array.isArray(body.input) || typeof body.input === "string";
+  return hasInput && !Array.isArray(body.messages);
+}
+
 export class DefaultExecutor extends BaseExecutor {
   constructor(provider) {
     super(provider, PROVIDERS[provider] || PROVIDERS.openai);
@@ -89,6 +97,12 @@ export class DefaultExecutor extends BaseExecutor {
         delete transformed.client_metadata;
       }
       stripUnsupportedParams(this.provider, model, transformed);
+      // Responses-shaped openai-compatible bodies must not leave with a flat
+      // reasoning_effort. Chat Completions bodies (messages[]) are unchanged.
+      if (this.provider?.startsWith?.("openai-compatible-") && isResponsesShaped(transformed)) {
+        nestResponsesReasoning(transformed);
+        ensurePromptCacheKey(transformed);
+      }
     }
 
     return injectReasoningContent({ provider: this.provider, model, body: transformed });
