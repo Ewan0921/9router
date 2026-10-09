@@ -1,3 +1,9 @@
+# v0.5.99-ewan.2 (2026-10-09)
+
+## Fixes
+- **Responses**: send `reasoning: { effort }` instead of a flat `reasoning_effort` for OpenAI-compatible Responses providers (including model suffixes like `gpt-6-astra(high)`), merging with an existing `reasoning` object
+- **Translator**: keep `prompt_cache_key` on Chat Completions and Responses, and mint a stable `9r-` + sha256 prefix key per conversation when the client did not send one
+
 # v0.5.99-ewan.1 (2026-10-09)
 
 ## Features

@@ -130,18 +130,24 @@ const NATIVE_ONLY_FORMATS = new Set(["gemini-level", "gemini-budget", "claude-bu
 function resolveFormat(targetFormat, model, provider) {
   if (targetFormat === "commandcode") return "commandcode";
   const providerFmt = provider ? PROVIDERS[provider]?.thinkingFormat : null;
-  if (providerFmt) return providerFmt;
+  if (providerFmt) return responsesEffortShape(providerFmt, targetFormat, provider);
   const caps = getCapabilitiesForModel(provider, model);
   const isOpenAIWire = targetFormat === "openai" || targetFormat === "openai-responses";
   if (caps.thinkingFormat && !(isOpenAIWire && NATIVE_ONLY_FORMATS.has(caps.thinkingFormat))) {
-    // Muse (Meta) strict Responses API rejects top-level reasoning_effort and
-    // requires nested reasoning: { effort, summary }. Other upstreams keep Chat-shaped effort.
-    if (provider === "muse" && targetFormat === "openai-responses") {
-      return "openai-responses";
-    }
-    return caps.thinkingFormat;
+    return responsesEffortShape(caps.thinkingFormat, targetFormat, provider);
   }
-  return FORMAT_TO_NATIVE[targetFormat] || "openai";
+  return responsesEffortShape(FORMAT_TO_NATIVE[targetFormat] || "openai", targetFormat, provider);
+}
+
+// Strict Responses upstreams (OpenAI-compatible apiType=responses, Muse) reject
+// a flat reasoning_effort. Nest effort for those targets. Codex / other
+// Responses executors still receive Chat-shaped effort and remap it themselves.
+function responsesEffortShape(fmt, targetFormat, provider) {
+  if (fmt !== "openai") return fmt;
+  if (targetFormat !== "openai-responses" && targetFormat !== "openai-response") return fmt;
+  if (provider === "muse") return "openai-responses";
+  if (typeof provider === "string" && provider.startsWith("openai-compatible-")) return "openai-responses";
+  return fmt;
 }
 
 // Convert unified config to a budget number (for budget-based formats).
@@ -429,7 +435,20 @@ export function applyThinking(targetFormat, model, body, provider = null, intent
   // comes back at all; keep what the client asked for instead of resetting it.
   // An OpenAI-shaped client's ask arrives via the captured intent instead.
   const display = typeof body.thinking?.display === "string" ? body.thinking.display : intent?.display;
+  // stripAll drops reasoning before the Responses shape is rewritten. Keep
+  // summary and any sibling fields so a client reasoning object is merged,
+  // not replaced, when effort is re-applied.
+  const priorReasoning = fmt === "openai-responses"
+    && body.reasoning
+    && typeof body.reasoning === "object"
+    && !Array.isArray(body.reasoning)
+    ? { ...body.reasoning }
+    : null;
   stripAll(body);
+  if (priorReasoning) {
+    const { effort: _effort, ...rest } = priorReasoning;
+    if (Object.keys(rest).length) body.reasoning = rest;
+  }
   applyFormat(fmt, body, cfg, caps, supportedLevels, display);
   return body;
 }
