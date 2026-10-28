@@ -109,6 +109,50 @@ describe("GOLDEN response stream: OpenAI-Responses (codex) → OpenAI", () => {
     expect(runStream(FORMATS.OPENAI_RESPONSES, FORMATS.OPENAI, events)).toMatchSnapshot();
   });
 
+
+  it("reasoning_text.delta maps to reasoning_content (protocol-generic)", () => {
+    const events = [
+      { type: "response.reasoning_text.delta", delta: "step1 " },
+      { type: "response.reasoning_text.delta", delta: "step2" },
+      { type: "response.output_text.delta", delta: "answer" },
+      { type: "response.completed", response: { usage: { input_tokens: 3, output_tokens: 2 } } },
+    ];
+    const out = runStream(FORMATS.OPENAI_RESPONSES, FORMATS.OPENAI, events);
+    const reasoning = out
+      .map((c) => c?.choices?.[0]?.delta?.reasoning_content)
+      .filter((t) => typeof t === "string" && t.length > 0);
+    expect(reasoning.join("")).toBe("step1 step2");
+    const content = out
+      .map((c) => c?.choices?.[0]?.delta?.content)
+      .filter((t) => typeof t === "string" && t.length > 0);
+    expect(content.join("")).toBe("answer");
+  });
+
+  it("reasoning_text.done fallback when no deltas were streamed", () => {
+    const events = [
+      { type: "response.reasoning_text.done", text: "only-done" },
+      { type: "response.output_text.delta", delta: "ok" },
+      { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
+    ];
+    const out = runStream(FORMATS.OPENAI_RESPONSES, FORMATS.OPENAI, events);
+    const reasoning = out
+      .map((c) => c?.choices?.[0]?.delta?.reasoning_content)
+      .filter((t) => typeof t === "string" && t.length > 0);
+    expect(reasoning.join("")).toBe("only-done");
+  });
+
+  it("keeps reasoning_summary_text.delta and does not drop it", () => {
+    const events = [
+      { type: "response.reasoning_summary_text.delta", delta: "summary-bit" },
+      { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
+    ];
+    const out = runStream(FORMATS.OPENAI_RESPONSES, FORMATS.OPENAI, events);
+    const reasoning = out
+      .map((c) => c?.choices?.[0]?.delta?.reasoning_content)
+      .filter((t) => typeof t === "string" && t.length > 0);
+    expect(reasoning.join("")).toBe("summary-bit");
+  });
+
   it("error event → error chunk (fallback id/created)", () => {
     const events = [
       { type: "error", error: { message: "model_not_found" } },

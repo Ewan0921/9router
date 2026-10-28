@@ -1,3 +1,9 @@
+# v0.5.111-ewan.2 (2026-10-28)
+
+## Fixes
+- **Translator**: map OpenAI Responses `response.reasoning_text.delta` / `.done` (and reasoning `output_item.done` fallbacks) to Chat Completions `delta.reasoning_content`, keeping the existing `reasoning_summary_text` path; protocol-generic with no model-name branching
+- **Non-stream**: when a Chat client talks to an openai-responses upstream, fold `reasoning_text` / `summary_text` parts into `message.reasoning_content` (JSON path and forced SSE→JSON)
+
 # v0.5.111-ewan.1 (2026-10-28)
 
 ## Features

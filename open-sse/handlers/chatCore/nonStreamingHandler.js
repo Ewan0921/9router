@@ -94,12 +94,101 @@ function openAICompletionToResponses(responseBody, customToolNames = null) {
 /**
  * Translate non-streaming response body from provider format → OpenAI format.
  */
+
+/**
+ * Convert an OpenAI Responses API non-streaming body into Chat Completions.
+ * Used when a Chat client is routed to an openai-responses upstream with
+ * stream:false. Pulls reasoning from reasoning_text content parts and/or
+ * summary_text (protocol-generic; no model-name branching).
+ */
+function openAIResponsesToOpenAICompletion(responseBody) {
+  if (!responseBody || typeof responseBody !== "object") return responseBody;
+  // Already Chat Completions shaped (some gateways reply in chat even when
+  // asked for Responses) — leave it alone.
+  if (Array.isArray(responseBody.choices)) return responseBody;
+
+  const output = Array.isArray(responseBody.output) ? responseBody.output : [];
+  let textContent = "";
+  let reasoningContent = "";
+  const toolCalls = [];
+
+  for (const item of output) {
+    if (!item || typeof item !== "object") continue;
+    if (item.type === RESPONSES_ITEM.REASONING || item.type === "reasoning") {
+      const parts = [];
+      for (const part of item.content || []) {
+        if (part?.type === "reasoning_text" && typeof part.text === "string" && part.text) {
+          parts.push(part.text);
+        }
+      }
+      for (const part of item.summary || []) {
+        if (
+          (part?.type === RESPONSES_ITEM.SUMMARY_TEXT || part?.type === "summary_text" || part?.type === "reasoning_text") &&
+          typeof part.text === "string" &&
+          part.text
+        ) {
+          parts.push(part.text);
+        }
+      }
+      if (parts.length) reasoningContent += parts.join("");
+      continue;
+    }
+    if (item.type === RESPONSES_ITEM.MESSAGE || item.type === "message") {
+      for (const part of item.content || []) {
+        if (
+          (part?.type === RESPONSES_ITEM.OUTPUT_TEXT || part?.type === "output_text") &&
+          typeof part.text === "string"
+        ) {
+          textContent += part.text;
+        }
+      }
+      continue;
+    }
+    if (item.type === RESPONSES_ITEM.FUNCTION_CALL || item.type === "function_call") {
+      toolCalls.push({
+        id: item.call_id || item.id || `call_${toolCalls.length}`,
+        type: "function",
+        function: {
+          name: item.name || "",
+          arguments: typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.arguments || {}),
+        },
+      });
+    }
+  }
+
+  const message = { role: "assistant" };
+  if (textContent) message.content = textContent;
+  if (reasoningContent) message.reasoning_content = reasoningContent;
+  if (toolCalls.length > 0) message.tool_calls = toolCalls;
+  if (!message.content && !message.tool_calls) message.content = "";
+
+  const usage = responseBody.usage || {};
+  const finishReason = toolCalls.length > 0 ? "tool_calls" : "stop";
+  return {
+    id: `chatcmpl-${String(responseBody.id || Date.now()).replace(/^resp_/, "")}`,
+    object: "chat.completion",
+    created: responseBody.created_at || Math.floor(Date.now() / 1000),
+    model: responseBody.model || "unknown",
+    choices: [{ index: 0, message, finish_reason: finishReason }],
+    usage: {
+      prompt_tokens: usage.input_tokens || usage.prompt_tokens || 0,
+      completion_tokens: usage.output_tokens || usage.completion_tokens || 0,
+      total_tokens: usage.total_tokens || (usage.input_tokens || 0) + (usage.output_tokens || 0),
+    },
+  };
+}
+
 export function translateNonStreamingResponse(responseBody, targetFormat, sourceFormat, customToolNames = null) {
   if (targetFormat === sourceFormat) return responseBody;
   // Provider responded in OpenAI Chat Completions shape but the client speaks
   // Responses API — convert so tool_calls/text surface as Responses `output`.
   if (targetFormat === FORMATS.OPENAI && sourceFormat === FORMATS.OPENAI_RESPONSES) {
     return openAICompletionToResponses(responseBody, customToolNames);
+  }
+  // Provider spoke Responses; Chat Completions client needs choices[].message,
+  // including reasoning_content from reasoning_text / summary_text parts.
+  if (targetFormat === FORMATS.OPENAI_RESPONSES && sourceFormat === FORMATS.OPENAI) {
+    return openAIResponsesToOpenAICompletion(responseBody);
   }
   if (targetFormat === FORMATS.OPENAI && sourceFormat === FORMATS.CLAUDE) {
     return openAICompletionToClaudeMessage(responseBody);

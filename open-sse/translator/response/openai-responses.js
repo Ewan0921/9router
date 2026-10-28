@@ -689,13 +689,65 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
     return null;
   }
 
-  // Reasoning summary delta → emit as reasoning_content for client thinking display
-  if (eventType === "response.reasoning_summary_text.delta") {
+  // Reasoning deltas → Chat Completions reasoning_content (protocol-generic).
+  // openai-responses upstreams may stream thinking on either channel:
+  //   - response.reasoning_text.delta      (full reasoning; Sail/DeepSeek-style)
+  //   - response.reasoning_summary_text.delta (summary; OpenAI-style)
+  // Emit both when non-empty. Typical Sail traffic only fills reasoning_text
+  // (summary deltas empty), so clients that previously saw only content now get
+  // reasoning_content. When both fire with different text, both are forwarded;
+  // identical duplicate streams are uncommon and not specially deduped.
+  if (
+    eventType === "response.reasoning_text.delta" ||
+    eventType === "response.reasoning_summary_text.delta"
+  ) {
     const delta = data.delta || "";
     if (!delta) return null;
+    state.reasoningContentEmitted = true;
     return buildChunk(
       { id: state.chatId, created: state.created, model: state.model || MODEL_FALLBACK },
       reasoningDelta(delta)
+    );
+  }
+
+  // Fallback when an upstream only sends .done (no deltas).
+  if (
+    eventType === "response.reasoning_text.done" ||
+    eventType === "response.reasoning_summary_text.done"
+  ) {
+    if (state.reasoningContentEmitted) return null;
+    const text = typeof data.text === "string" ? data.text : "";
+    if (!text) return null;
+    state.reasoningContentEmitted = true;
+    return buildChunk(
+      { id: state.chatId, created: state.created, model: state.model || MODEL_FALLBACK },
+      reasoningDelta(text)
+    );
+  }
+
+  // Fallback: reasoning output_item.done with content/summary parts, when no
+  // reasoning_* deltas/done text was streamed earlier.
+  if (eventType === "response.output_item.done" && data.item?.type === RESPONSES_ITEM.REASONING) {
+    if (state.reasoningContentEmitted) return null;
+    const item = data.item || {};
+    const parts = [];
+    const collect = (arr) => {
+      if (!Array.isArray(arr)) return;
+      for (const part of arr) {
+        if (!part || typeof part.text !== "string" || !part.text) continue;
+        if (part.type === "reasoning_text" || part.type === RESPONSES_ITEM.SUMMARY_TEXT) {
+          parts.push(part.text);
+        }
+      }
+    };
+    collect(item.content);
+    collect(item.summary);
+    const text = parts.join("");
+    if (!text) return null;
+    state.reasoningContentEmitted = true;
+    return buildChunk(
+      { id: state.chatId, created: state.created, model: state.model || MODEL_FALLBACK },
+      reasoningDelta(text)
     );
   }
 

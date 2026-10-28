@@ -276,6 +276,27 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, ta
       } else {
         const message = { role: "assistant", content: textContent || (hasToolCalls ? null : "") };
         if (hasToolCalls) message.tool_calls = toolCalls;
+        // Protocol-generic: fold reasoning_text / summary_text into reasoning_content
+        // so Chat clients see thinking when the upstream spoke Responses SSE.
+        const reasoningParts = [];
+        for (const item of jsonResponse.output || []) {
+          if (!item || (item.type !== "reasoning" && item.type !== RESPONSES_ITEM?.REASONING)) continue;
+          for (const part of item.content || []) {
+            if (part?.type === "reasoning_text" && typeof part.text === "string" && part.text) {
+              reasoningParts.push(part.text);
+            }
+          }
+          for (const part of item.summary || []) {
+            if (
+              (part?.type === "summary_text" || part?.type === "reasoning_text") &&
+              typeof part.text === "string" &&
+              part.text
+            ) {
+              reasoningParts.push(part.text);
+            }
+          }
+        }
+        if (reasoningParts.length) message.reasoning_content = reasoningParts.join("");
         const responseDone = jsonResponse.status === "completed" || jsonResponse.status === "done";
         const finishReason = hasToolCalls ? "tool_calls" : (responseDone ? "stop" : (jsonResponse.status || "stop"));
         finalResp = {
