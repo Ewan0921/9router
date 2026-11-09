@@ -1,3 +1,8 @@
+# v0.5.116-ewan.3 (2026-11-09)
+
+## Fixes
+- **Build/Runtime**: restore `undici` to upstream `^8.12.3` (drop fork-only `^7.30.2` pin). CLI pack re-execs under Node 22.23.4 via `npx` when the runner is older (Actions still installs Node 20 for setup). VPS NodeSource upgraded to Node 22 LTS to match.
+
 # v0.5.116-ewan.2 (2026-11-09)
 
 ## Fixes

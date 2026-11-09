@@ -1,6 +1,6 @@
 {
   "name": "9router-app",
-  "version": "0.5.116-ewan.2",
+  "version": "0.5.116-ewan.3",
   "description": "9Router web dashboard",
   "private": true,
   "scripts": {
@@ -13,7 +13,7 @@
     "dev:bun": "bun --bun next dev --webpack --port 20127",
     "build:bun": "bun --bun next build --webpack",
     "start:bun": "bun ./.next/standalone/custom-server.js",
-    "cli:pack": "npm --prefix cli run pack:cli",
+    "cli:pack": "node scripts/cli-pack-node22.mjs",
     "cli:publish": "npm --prefix cli run publish:cli"
   },
   "dependencies": {
@@ -44,7 +44,7 @@
     "recharts": "^3.7.0",
     "socks-proxy-agent": "^8.0.5",
     "sql.js": "^1.14.1",
-    "undici": "^7.30.2",
+    "undici": "^8.12.3",
     "uuid": "^13.0.0",
     "zustand": "^5.0.10"
   },
@@ -54,8 +54,8 @@
     "better-sqlite3": "^12.6.2",
     "ws": "^8.18.0"
   },
-  "comment_better_sqlite3": "kept in optionalDependencies so npm install doesn't fail on systems without build tools — sql.js is used as fallback at runtime",
-  "comment_aws_sdk_credential_providers": "kept in optionalDependencies (npm still installs these by default) and imported lazily in shared/awsCredentials.js — only AWS Bedrock connections using profile/SSO mode need it; static accessKeyId/secretAccessKey connections never load it",
+  "comment_better_sqlite3": "kept in optionalDependencies so npm install doesn't fail on systems without build tools \u2014 sql.js is used as fallback at runtime",
+  "comment_aws_sdk_credential_providers": "kept in optionalDependencies (npm still installs these by default) and imported lazily in shared/awsCredentials.js \u2014 only AWS Bedrock connections using profile/SSO mode need it; static accessKeyId/secretAccessKey connections never load it",
   "comment_playwright_core": "devDependency only (keeps end-user installs small); open-sse/services/lazyRuntime.js downloads it + wreq-js on first use into <DATA_DIR>/runtime. playwright-core ships no browser binaries (run `npx playwright-core install chromium` or point OBSCURA_CDP_ENDPOINT/cloakbrowser at a stealth engine)",
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",
