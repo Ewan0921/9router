@@ -1,3 +1,8 @@
+# v0.5.116-ewan.2 (2026-11-09)
+
+## Fixes
+- **Deps**: pin `undici` to `^7.30.2` so CLI pack on Actions (Node 20) still works; upstream `^8.12.3` needs Node `>=22.19.0` and failed Next page collection on oauth routes (`reading 'bind'`)
+
 # v0.5.116-ewan.1 (2026-11-09)
 
 ## Features
